@@ -37,6 +37,7 @@ func GetEnv(key, defaultValue string) string {
 	if value, exist := os.LookupEnv(key); exist {
 		return value
 	}
+
 	log.Printf("⚠️ %s not set, using default: %s", key, defaultValue)
 	return defaultValue
 }

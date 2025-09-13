@@ -1,0 +1,52 @@
+package userui
+
+templ LoginForm(email string, errors []string) {
+	<div id="auth-box">
+		<h2>Login</h2>
+		if len(errors) > 0 {
+			<div class="errors" style="color:#b91c1c;">
+				<ul>
+					for _, e := range errors {
+						<li>{ e }</li>
+					}
+				</ul>
+			</div>
+		}
+		<form hx-post="/api/user/login" hx-target="#auth-box" hx-swap="outerHTML" method="post">
+			<label>Email</label><br/>
+			<input type="email" name="email" value={ email } required autocomplete="email"/><br/>
+			<label>Пароль</label><br/>
+			<input type="password" name="password" required minlength="8" autocomplete="current-password"/><br/>
+			<button type="submit">Увійти</button>
+			<p>Немає акаунта? <a href="/register">Реєстрація</a></p>
+		</form>
+	</div>
+}
+
+templ LoginSuccess(email string) {
+	<div id="auth-box">
+		<h2>Увійшли</h2>
+		<p>Ви увійшли як <strong>{ email }</strong>.</p>
+		<a href="/">На головну</a>
+	</div>
+}
+
+templ LoginPage(email string, errors []string) {
+	<!DOCTYPE html>
+	<html lang="uk">
+	  <head>
+	    <meta charset="utf-8"/>
+	    <title>Вхід</title>
+	    <script src="https://unpkg.com/htmx.org@1.9.12" crossorigin="anonymous"></script>
+	    <meta name="viewport" content="width=device-width,initial-scale=1"/>
+	    <style>
+	      body { font-family: system-ui, Arial, sans-serif; max-width:480px; margin:2rem auto; padding:1rem; }
+	      input { width:100%; padding:.5rem; margin-bottom:.75rem; }
+	      button { padding:.6rem 1rem; cursor:pointer; }
+	    </style>
+	  </head>
+	  <body>
+	    @LoginForm(email, errors)
+	  </body>
+	</html>
+}

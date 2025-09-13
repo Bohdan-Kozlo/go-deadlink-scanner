@@ -1,0 +1,52 @@
+package userui
+
+templ RegisterForm(email string, errors []string) {
+	<div id="auth-box">
+		<h2>Реєстрація</h2>
+		if len(errors) > 0 {
+			<div class="errors" style="color:#b91c1c;">
+				<ul>
+					for _, e := range errors {
+						<li>{ e }</li>
+					}
+				</ul>
+			</div>
+		}
+		<form hx-post="/api/user/register" hx-target="#auth-box" hx-swap="outerHTML" method="post">
+			<label>Email</label><br/>
+			<input type="email" name="email" value={ email } required autocomplete="email"/><br/>
+			<label>Пароль</label><br/>
+			<input type="password" name="password" required minlength="8" autocomplete="new-password"/><br/>
+			<button type="submit">Створити акаунт</button>
+			<p>Вже є акаунт? <a href="/login">Увійти</a></p>
+		</form>
+	</div>
+}
+
+templ RegisterSuccess(email string) {
+	<div id="auth-box">
+		<h2>Успіх</h2>
+		<p>Акаунт для <strong>{ email }</strong> створено.</p>
+		<a href="/login">Перейти до входу</a>
+	</div>
+}
+
+templ RegisterPage(email string, errors []string) {
+	<!DOCTYPE html>
+	<html lang="uk">
+	  <head>
+	    <meta charset="utf-8"/>
+	    <title>Реєстрація</title>
+	    <script src="https://unpkg.com/htmx.org@1.9.12" crossorigin="anonymous"></script>
+	    <meta name="viewport" content="width=device-width,initial-scale=1"/>
+	    <style>
+	      body { font-family: system-ui, Arial, sans-serif; max-width:480px; margin:2rem auto; padding:1rem; }
+	      input { width:100%; padding:.5rem; margin-bottom:.75rem; }
+	      button { padding:.6rem 1rem; cursor:pointer; }
+	    </style>
+	  </head>
+	  <body>
+	    @RegisterForm(email, errors)
+	  </body>
+	</html>
+}
