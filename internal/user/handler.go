@@ -90,3 +90,16 @@ func (h *Handler) Login(c *fiber.Ctx) error {
 	}
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{"user_id": u.ID, "email": u.Email, "session_token": token})
 }
+
+func (h *Handler) Logout(c *fiber.Ctx) error {
+	err := h.Service.Logout(c.Context(), c.Cookies("session_token"))
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "logout failed",
+		})
+	}
+
+	c.ClearCookie("session_token")
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{})
+}

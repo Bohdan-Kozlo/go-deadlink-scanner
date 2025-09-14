@@ -14,3 +14,7 @@ WHERE session_token = $1;
 -- name: DeleteSessionsByUser :exec
 DELETE FROM sessions
 WHERE user_id = $1;
+
+-- name: GetActiveSessionsByUser :one
+SELECT * FROM sessions
+WHERE user_id = $1 AND expires_at > NOW();

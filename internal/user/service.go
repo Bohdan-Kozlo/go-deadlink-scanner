@@ -3,7 +3,9 @@ package user
 import (
 	"context"
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
+	"errors"
 	"time"
 
 	db "go-deadlink-scanner/internal/database/sqlc"
@@ -49,12 +51,21 @@ func (s *Service) Login(ctx context.Context, email, password string) (db.User, s
 		return db.User{}, "", err
 	}
 
-	token, err := s.newSessionToken(ctx, user.ID)
+	token, err := s.getOrCreateSessionToken(ctx, user.ID)
 	if err != nil {
 		return db.User{}, "", err
 	}
 
 	return user, token, nil
+}
+
+func (s *Service) Logout(ctx context.Context, token string) error {
+	err := s.Queries.DeleteSession(ctx, token)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (s *Service) SetSession(c *fiber.Ctx, token string) error {
@@ -68,6 +79,17 @@ func (s *Service) SetSession(c *fiber.Ctx, token string) error {
 		Path:     "/",
 	})
 	return nil
+}
+
+func (s *Service) getOrCreateSessionToken(ctx context.Context, userID int32) (string, error) {
+	session, err := s.Queries.GetActiveSessionsByUser(ctx, userID)
+	if err == nil {
+		return session.SessionToken, nil
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return "", err
+	}
+
+	return s.newSessionToken(ctx, userID)
 }
 
 func (s *Service) newSessionToken(ctx context.Context, userID int32) (string, error) {
