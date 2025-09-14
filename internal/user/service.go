@@ -9,17 +9,15 @@ import (
 	db "go-deadlink-scanner/internal/database/sqlc"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/session"
 	"golang.org/x/crypto/bcrypt"
 )
 
 type Service struct {
-	Queries      *db.Queries
-	SessionStore *session.Store
+	Queries *db.Queries
 }
 
-func NewService(queries *db.Queries, store *session.Store) *Service {
-	return &Service{Queries: queries, SessionStore: store}
+func NewService(queries *db.Queries) *Service {
+	return &Service{Queries: queries}
 }
 
 func (s *Service) Register(ctx context.Context, email, password string) (db.User, string, error) {
@@ -59,16 +57,17 @@ func (s *Service) Login(ctx context.Context, email, password string) (db.User, s
 	return user, token, nil
 }
 
-func (s *Service) SetSession(c *fiber.Ctx, userID int32, token string) error {
-	sess, err := s.SessionStore.Get(c)
-	if err != nil {
-		return err
-	}
-	sess.Set("user_id", userID)
-	sess.Set("session_token", token)
-	sess.SetExpiry(7 * 24 * time.Hour)
-
-	return sess.Save()
+func (s *Service) SetSession(c *fiber.Ctx, token string) error {
+	c.Cookie(&fiber.Cookie{
+		Name:     "session_token",
+		Value:    token,
+		HTTPOnly: true,
+		SameSite: "Lax",
+		Secure:   false,
+		Expires:  time.Now().Add(7 * 24 * time.Hour),
+		Path:     "/",
+	})
+	return nil
 }
 
 func (s *Service) newSessionToken(ctx context.Context, userID int32) (string, error) {

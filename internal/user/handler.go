@@ -22,15 +22,22 @@ func (h *Handler) LoginPage(c *fiber.Ctx) error {
 	return ui.RenderComponent(c, userui.LoginPage("", nil))
 }
 
-func (h *Handler) Register(c *fiber.Ctx) error {
+func (h *Handler) processAuthForm(c *fiber.Ctx) (User, []string, error) {
 	form := User{Email: c.FormValue("email"), Pass: c.FormValue("password")}
 	validate := validator.New()
 	if err := validate.Struct(form); err != nil {
-		errs := []string{err.Error()}
+		return form, []string{err.Error()}, err
+	}
+	return form, nil, nil
+}
+
+func (h *Handler) Register(c *fiber.Ctx) error {
+	form, errs, err := h.processAuthForm(c)
+	if err != nil {
 		if ui.IsHX(c) {
 			return ui.RenderComponent(c, userui.RegisterForm(form.Email, errs))
 		}
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": errs[0]})
 	}
 
 	u, token, err := h.Service.Register(c.Context(), form.Email, form.Pass)
@@ -41,7 +48,7 @@ func (h *Handler) Register(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}
 
-	if err := h.Service.SetSession(c, u.ID, token); err != nil {
+	if err := h.Service.SetSession(c, token); err != nil {
 		if ui.IsHX(c) {
 			return ui.RenderComponent(c, userui.RegisterForm(form.Email, []string{"Problem with session"}))
 		}
@@ -55,14 +62,12 @@ func (h *Handler) Register(c *fiber.Ctx) error {
 }
 
 func (h *Handler) Login(c *fiber.Ctx) error {
-	form := User{Email: c.FormValue("email"), Pass: c.FormValue("password")}
-	validate := validator.New()
-	if err := validate.Struct(form); err != nil {
-		errs := []string{err.Error()}
+	form, errs, err := h.processAuthForm(c)
+	if err != nil {
 		if ui.IsHX(c) {
 			return ui.RenderComponent(c, userui.LoginForm(form.Email, errs))
 		}
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": errs[0]})
 	}
 
 	u, token, err := h.Service.Login(c.Context(), form.Email, form.Pass)
@@ -73,7 +78,7 @@ func (h *Handler) Login(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid credentials"})
 	}
 
-	if err := h.Service.SetSession(c, u.ID, token); err != nil {
+	if err := h.Service.SetSession(c, token); err != nil {
 		if ui.IsHX(c) {
 			return ui.RenderComponent(c, userui.LoginForm(form.Email, []string{"Problem with session"}))
 		}
