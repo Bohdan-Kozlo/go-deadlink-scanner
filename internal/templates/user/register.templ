@@ -6,26 +6,26 @@ templ registerFormContent(email string) {
 <form hx-post="/api/user/register" hx-target="#auth-box" hx-swap="outerHTML" method="post">
     <label>Email</label><br />
     <input type="email" name="email" value={ email } required autocomplete="email" /><br />
-    <label>Пароль</label><br />
+    <label>Password</label><br />
     <input type="password" name="password" required minlength="8" autocomplete="new-password" /><br />
-    <button type="submit">Створити акаунт</button>
-    <p>Вже є акаунт? <a href="/login">Увійти</a></p>
+    <button type="submit">Create account</button>
+    <p>Already have an account? <a href="/login">Sign in</a></p>
 </form>
 }
 
 templ RegisterForm(email string, errors []string) {
-@shared.AuthBox("Реєстрація", registerFormContent(email), errors)
+@shared.AuthBox("Register", registerFormContent(email), errors)
 }
 
 templ registerSuccessContent(email string) {
-<p>Акаунт для <strong>{ email }</strong> створено.</p>
-<a href="/login">Перейти до входу</a>
+<p>Account for <strong>{ email }</strong> created.</p>
+<a href="/login">Go to login</a>
 }
 
 templ RegisterSuccess(email string) {
-@shared.AuthBox("Успіх", registerSuccessContent(email), nil)
+@shared.AuthBox("Success", registerSuccessContent(email), nil)
 }
 
 templ RegisterPage(email string, errors []string) {
-@shared.Base("Реєстрація", RegisterForm(email, errors))
+@shared.Base("Register", RegisterForm(email, errors))
 }

@@ -92,14 +92,16 @@ func (h *Handler) Login(c *fiber.Ctx) error {
 }
 
 func (h *Handler) Logout(c *fiber.Ctx) error {
-	err := h.Service.Logout(c.Context(), c.Cookies("session_token"))
+	token := c.Cookies("session_token")
+	err := h.Service.Logout(c.Context(), token)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "logout failed",
-		})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "logout failed"})
 	}
-
 	c.ClearCookie("session_token")
 
-	return c.Status(fiber.StatusOK).JSON(fiber.Map{})
+	if ui.IsHX(c) {
+		c.Set("HX-Redirect", "/login")
+		return c.SendStatus(fiber.StatusOK)
+	}
+	return c.Redirect("/login", fiber.StatusSeeOther)
 }
