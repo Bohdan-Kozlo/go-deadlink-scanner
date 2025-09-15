@@ -39,7 +39,7 @@ func main() {
 	})
 
 	userService := user.NewService(queries)
-	scannerService := scanner.NewService(queries)
+	scannerService := scanner.NewService(queries, cfg.MaxScannerWorkers)
 
 	userHandler := user.NewHandler(userService)
 	scannerHandler := scanner.NewHandler(scannerService)
