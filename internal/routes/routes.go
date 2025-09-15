@@ -8,20 +8,30 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-func Setup(app *fiber.App, userHandler *user.Handler,
-	scannerHandler *scanner.Handler, authMiddleware *auth.Middleware) {
-	app.Get("/register", userHandler.RegisterPage)
-	app.Get("/login", userHandler.LoginPage)
-	app.Get("scan", authMiddleware.RequireAuth(), scannerHandler.ScanPage)
+type Router struct {
+	app            *fiber.App
+	userHandler    *user.Handler
+	scannerHandler *scanner.Handler
+	authMiddleware *auth.Middleware
+}
 
-	app.Post("/logout", userHandler.Logout)
+func New(app *fiber.App, uh *user.Handler, sh *scanner.Handler, am *auth.Middleware) *Router {
+	return &Router{app: app, userHandler: uh, scannerHandler: sh, authMiddleware: am}
+}
 
-	userGroup := app.Group("/api/user")
-	userGroup.Post("/register", userHandler.Register)
-	userGroup.Post("/login", userHandler.Login)
-	userGroup.Post("/logout", authMiddleware.RequireAuth(), userHandler.Logout)
+func (r *Router) Register() {
+	r.app.Get("/register", r.userHandler.RegisterPage)
+	r.app.Get("/login", r.userHandler.LoginPage)
 
-	scannerGroup := app.Group("/api/scanner", authMiddleware.RequireAuth())
-	scannerGroup.Post("/start", scannerHandler.StartScan)
+	r.app.Get("/scan", r.authMiddleware.RequireAuth(), r.scannerHandler.ScanPage)
 
+	r.app.Post("/logout", r.userHandler.Logout)
+
+	userGroup := r.app.Group("/api/user")
+	userGroup.Post("/register", r.userHandler.Register)
+	userGroup.Post("/login", r.userHandler.Login)
+	userGroup.Post("/logout", r.authMiddleware.RequireAuth(), r.userHandler.Logout)
+
+	scannerGroup := r.app.Group("/api/scanner", r.authMiddleware.RequireAuth())
+	scannerGroup.Post("/scan", r.scannerHandler.StartScan)
 }

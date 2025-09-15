@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"go-deadlink-scanner/internal/auth"
 	"go-deadlink-scanner/internal/config"
-	db "go-deadlink-scanner/internal/database/sqlc"
+	"go-deadlink-scanner/internal/database/sqlc" // added
 	"go-deadlink-scanner/internal/routes"
 	"go-deadlink-scanner/internal/scanner"
 	"go-deadlink-scanner/internal/user"
@@ -46,7 +46,8 @@ func main() {
 
 	middleware := auth.NewMiddleware(queries)
 
-	routes.Setup(app, userHandler, scannerHandler, middleware)
+	r := routes.New(app, userHandler, scannerHandler, middleware)
+	r.Register()
 
 	log.Printf("Server started on :%s", cfg.Port)
 	if err := app.Listen(":" + cfg.Port); err != nil {
