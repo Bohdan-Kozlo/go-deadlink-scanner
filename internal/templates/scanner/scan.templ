@@ -1,0 +1,87 @@
+package scannerui
+
+import "go-deadlink-scanner/internal/templates/shared"
+
+// ResultRow is a lightweight UI row model.
+type ResultRow struct {
+    Link     string
+    Status   string
+    Duration string
+}
+
+templ ScanForm() {
+<form id="scan-form" hx-post="/api/scanner/scan" hx-target="#scan-results" hx-swap="innerHTML" hx-indicator="#scan-indicator">
+    <div class="field">
+        <label for="scan-url">Page URL</label>
+        <div class="flex gap-s">
+            <input id="scan-url" type="url" name="url" placeholder="https://example.com" required />
+            <button class="btn" type="submit">Scan</button>
+        </div>
+    </div>
+    <div id="scan-indicator" class="loading-indicator">
+        <span>Scanning...</span>
+    </div>
+</form>
+}
+
+templ ResultsPlaceholder() {
+<div class="placeholder">No results yet. Enter a page URL and start a scan.</div>
+}
+
+templ ResultsTable(rows []ResultRow, pageURL string) {
+<div>
+    if pageURL != "" {
+    <div class="mt"><span class="badge">Page</span> <span class="muted">{ pageURL }</span></div>
+    }
+    if len(rows) == 0 {
+        @ResultsPlaceholder()
+    } else {
+    <div class="results-table-wrapper mt">
+        <table>
+            <thead>
+                <tr>
+                    <th style="width:55%">Link</th>
+                    <th style="width:15%">Status</th>
+                    <th style="width:15%">Time</th>
+                </tr>
+            </thead>
+            <tbody>
+                for _, r := range rows {
+                <tr>
+                    <td><a href={ r.Link } target="_blank" rel="noopener noreferrer">{ r.Link }</a></td>
+                    if r.Status == "200" {
+                        <td class="status-ok">{ r.Status }</td>
+                    } else if r.Status == "timeout" || r.Status == "error" || r.Status == "404" {
+                        <td class="status-bad">{ r.Status }</td>
+                    } else {
+                        <td class="status-other">{ r.Status }</td>
+                    }
+                    <td class="muted">{ r.Duration }</td>
+                </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    }
+</div>
+}
+
+templ ScanContent(pageURL string, rows []ResultRow) {
+<nav>
+    <div class="brand">Dead Link Scanner</div>
+    <form hx-post="/logout" hx-target="body" hx-swap="outerHTML">
+        <button type="submit" class="btn secondary btn-sm">Logout</button>
+    </form>
+</nav>
+<h2 class="mt-0">Scan for Broken Links</h2>
+<p class="muted lead">Enter a page URL. We'll fetch it, extract links and test them.</p>
+@ScanForm()
+<div id="scan-results" class="mt-lg">
+    @ResultsTable(rows, pageURL)
+</div>
+}
+
+templ ScanPage(pageURL string, rows []ResultRow) {
+@shared.AppBase("Dead Link Scanner", ScanContent(pageURL, rows))
+}
+

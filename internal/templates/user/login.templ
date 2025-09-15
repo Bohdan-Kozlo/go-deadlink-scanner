@@ -4,12 +4,16 @@ import "go-deadlink-scanner/internal/templates/shared"
 
 templ loginFormContent(email string) {
 <form hx-post="/api/user/login" hx-target="#auth-box" hx-swap="outerHTML" method="post">
-    <label>Email</label><br />
-    <input type="email" name="email" value={ email } required autocomplete="email" /><br />
-    <label>Password</label><br />
-    <input type="password" name="password" required minlength="8" autocomplete="current-password" /><br />
-    <button type="submit">Sign in</button>
-    <p>Don't have an account? <a href="/register">Register</a></p>
+    <div class="field">
+        <label>Email</label>
+        <input type="email" name="email" value={ email } required autocomplete="email" />
+    </div>
+    <div class="field">
+        <label>Password</label>
+        <input type="password" name="password" required minlength="8" autocomplete="current-password" />
+    </div>
+    <button class="btn block" type="submit">Sign in</button>
+    <p class="form-alt">Don't have an account? <a href="/register">Register</a></p>
 </form>
 }
 
@@ -18,8 +22,8 @@ templ LoginForm(email string, errors []string) {
 }
 
 templ loginSuccessContent(email string) {
-<p>You are signed in as <strong>{ email }</strong>.</p>
-<a href="/">Home</a>
+<p class="mt-0">You are signed in as <strong>{ email }</strong>.</p>
+<a class="btn block mt" href="/">Home</a>
 }
 
 templ LoginSuccess(email string) {

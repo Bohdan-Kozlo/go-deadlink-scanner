@@ -12,7 +12,10 @@ func Setup(app *fiber.App, userHandler *user.Handler,
 	scannerHandler *scanner.Handler, authMiddleware *auth.Middleware) {
 	app.Get("/register", userHandler.RegisterPage)
 	app.Get("/login", userHandler.LoginPage)
+	app.Get("scan", authMiddleware.RequireAuth(), scannerHandler.ScanPage)
+
 	app.Post("/logout", userHandler.Logout)
+
 	userGroup := app.Group("/api/user")
 	userGroup.Post("/register", userHandler.Register)
 	userGroup.Post("/login", userHandler.Login)
@@ -20,4 +23,5 @@ func Setup(app *fiber.App, userHandler *user.Handler,
 
 	scannerGroup := app.Group("/api/scanner", authMiddleware.RequireAuth())
 	scannerGroup.Post("/start", scannerHandler.StartScan)
+
 }

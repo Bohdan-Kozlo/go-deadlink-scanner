@@ -11,6 +11,7 @@ import (
 	"log"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/logger"
 	_ "github.com/lib/pq"
 )
 
@@ -28,6 +29,10 @@ func main() {
 	app := fiber.New(fiber.Config{
 		AppName: "Go Dead Link Scanner",
 	})
+
+	app.Use(logger.New())
+
+	app.Static("/static", "./static")
 
 	app.Get("/health", func(c *fiber.Ctx) error {
 		return c.SendString("OK")

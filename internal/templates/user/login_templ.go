@@ -31,20 +31,20 @@ func loginFormContent(email string) templ.Component {
 			templ_7745c5c3_Var1 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<form hx-post=\"/api/user/login\" hx-target=\"#auth-box\" hx-swap=\"outerHTML\" method=\"post\"><label>Email</label><br><input type=\"email\" name=\"email\" value=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<form hx-post=\"/api/user/login\" hx-target=\"#auth-box\" hx-swap=\"outerHTML\" method=\"post\"><div class=\"field\"><label>Email</label> <input type=\"email\" name=\"email\" value=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var2 string
 		templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.JoinStringErrs(email)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/user/login.templ`, Line: 8, Col: 50}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/user/login.templ`, Line: 9, Col: 54}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var2))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "\" required autocomplete=\"email\"><br><label>Пароль</label><br><input type=\"password\" name=\"password\" required minlength=\"8\" autocomplete=\"current-password\"><br><button type=\"submit\">Увійти</button><p>Немає акаунта? <a href=\"/register\">Реєстрація</a></p></form>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "\" required autocomplete=\"email\"></div><div class=\"field\"><label>Password</label> <input type=\"password\" name=\"password\" required minlength=\"8\" autocomplete=\"current-password\"></div><button class=\"btn block\" type=\"submit\">Sign in</button><p class=\"form-alt\">Don't have an account? <a href=\"/register\">Register</a></p></form>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -102,20 +102,20 @@ func loginSuccessContent(email string) templ.Component {
 			templ_7745c5c3_Var4 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<p>Ви увійшли як <strong>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<p class=\"mt-0\">You are signed in as <strong>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var5 string
 		templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(email)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/user/login.templ`, Line: 21, Col: 43}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/templates/user/login.templ`, Line: 25, Col: 52}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "</strong>.</p><a href=\"/\">На головну</a>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "</strong>.</p><a class=\"btn block mt\" href=\"/\">Home</a>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -144,7 +144,7 @@ func LoginSuccess(email string) templ.Component {
 			templ_7745c5c3_Var6 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = shared.AuthBox("Увійшли", loginSuccessContent(email), nil).Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = shared.AuthBox("Signed in", loginSuccessContent(email), nil).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -173,7 +173,7 @@ func LoginPage(email string, errors []string) templ.Component {
 			templ_7745c5c3_Var7 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = shared.Base("Вхід", LoginForm(email, errors)).Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = shared.Base("Login", LoginForm(email, errors)).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

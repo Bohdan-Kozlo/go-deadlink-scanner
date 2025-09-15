@@ -1,6 +1,11 @@
 package scanner
 
-import "github.com/gofiber/fiber/v2"
+import (
+	scannerui "go-deadlink-scanner/internal/templates/scanner"
+	"go-deadlink-scanner/internal/ui"
+
+	"github.com/gofiber/fiber/v2"
+)
 
 type Handler struct {
 	service *Service
@@ -10,6 +15,10 @@ func NewHandler(service *Service) *Handler {
 	return &Handler{
 		service: service,
 	}
+}
+
+func (h *Handler) ScanPage(c *fiber.Ctx) error {
+	return ui.RenderComponent(c, scannerui.ScanPage("example.com", nil))
 }
 
 func (h *Handler) StartScan(c *fiber.Ctx) error {
