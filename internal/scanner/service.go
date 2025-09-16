@@ -70,8 +70,8 @@ func (s *Service) startScan(startURL string) []Result {
 	s.wg.Add(1)
 	s.acquire()
 	go func() {
+		defer s.release()
 		s.scanURL(startURL, startURL)
-		s.release()
 	}()
 
 	go func() {
@@ -110,25 +110,24 @@ func (s *Service) scanURL(baseURL, currentURL string) {
 			continue
 		}
 
-		s.wg.Add(1)
-		s.acquire()
-		go func(l string) {
-			defer s.release()
-			defer s.wg.Done()
-			status := s.checkLink(l)
-			s.results <- Result{Link: l, Status: status}
-		}(abs)
-
 		if sameDomain(baseURL, abs) {
+			s.wg.Add(1)
+			s.acquire()
+			go func(l string) {
+				defer s.release()
+				defer s.wg.Done()
+				status := s.checkLink(l)
+				s.results <- Result{Link: l, Status: status}
+			}(abs)
+
 			s.mu.Lock()
-			already := s.visited[abs]
-			if !already {
+			if !s.visited[abs] {
 				s.visited[abs] = true
 				s.wg.Add(1)
 				s.acquire()
 				go func(next string) {
+					defer s.release()
 					s.scanURL(baseURL, next)
-					s.release()
 				}(abs)
 			}
 			s.mu.Unlock()
@@ -164,11 +163,11 @@ func (s *Service) fetchPageLinks(pageURL string) ([]string, error) {
 	defer resp.Body.Close()
 
 	var links []string
-
 	doc, err := html.Parse(resp.Body)
 	if err != nil {
 		return nil, err
 	}
+
 	var f func(*html.Node)
 	f = func(n *html.Node) {
 		if n.Type == html.ElementNode && n.Data == "a" {
