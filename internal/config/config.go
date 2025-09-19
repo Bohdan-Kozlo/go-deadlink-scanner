@@ -12,9 +12,11 @@ import (
 type Config struct {
 	DBUrl             string
 	Port              string
-	SessionSecret     string
 	SessionMaxAge     time.Duration
 	MaxScannerWorkers int
+	EnableTLS         bool
+	TLSCertFile       string
+	TLSKeyFile        string
 }
 
 func LoadConfig() *Config {
@@ -24,8 +26,10 @@ func LoadConfig() *Config {
 	}
 
 	dbUrl := GetEnv("DB_URL", "postgres://postgres:postgres@localhost:5432/linkchecker?sslmode=disable")
-	sessionSecret := GetEnv("SESSION_SECRET", "supersecretkey")
 	serverPort := GetEnv("SERVER_PORT", "8080")
+	enableTLSStr := GetEnv("ENABLE_TLS", "false")
+	tlsCertFile := GetEnv("TLS_CERT_FILE", "cert/dev-cert.pem")
+	tlsKeyFile := GetEnv("TLS_KEY_FILE", "cert/dev-key.pem")
 	mwStr := GetEnv("MAX_SCANNER_WORKERS", "100")
 	mw, err := strconv.Atoi(mwStr)
 	if err != nil {
@@ -36,9 +40,11 @@ func LoadConfig() *Config {
 	return &Config{
 		DBUrl:             dbUrl,
 		Port:              serverPort,
-		SessionSecret:     sessionSecret,
 		SessionMaxAge:     7 * 24 * time.Hour,
 		MaxScannerWorkers: mw,
+		EnableTLS:         enableTLSStr == "true" || enableTLSStr == "1" || enableTLSStr == "on",
+		TLSCertFile:       tlsCertFile,
+		TLSKeyFile:        tlsKeyFile,
 	}
 }
 

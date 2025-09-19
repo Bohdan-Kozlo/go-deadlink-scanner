@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"go-deadlink-scanner/internal/auth"
 	"go-deadlink-scanner/internal/config"
-	"go-deadlink-scanner/internal/database/sqlc" // added
+	db "go-deadlink-scanner/internal/database/sqlc"
 	"go-deadlink-scanner/internal/routes"
 	"go-deadlink-scanner/internal/scanner"
 	"go-deadlink-scanner/internal/user"
@@ -50,6 +50,13 @@ func main() {
 	r.Register()
 
 	log.Printf("Server started on :%s", cfg.Port)
+	if cfg.EnableTLS {
+		log.Println("TLS enabled")
+		if err := app.ListenTLS(":"+cfg.Port, cfg.TLSCertFile, cfg.TLSKeyFile); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
 	if err := app.Listen(":" + cfg.Port); err != nil {
 		log.Fatal(err)
 	}
