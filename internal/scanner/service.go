@@ -4,219 +4,277 @@ import (
 	"context"
 	"fmt"
 	db "go-deadlink-scanner/internal/database/sqlc"
+	"io"
+	"log"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
+	"time"
 
 	"golang.org/x/net/html"
 )
 
 type Service struct {
 	queries    *db.Queries
-	visited    map[string]bool
-	mu         sync.Mutex
-	wg         sync.WaitGroup
-	results    chan Result
-	sem        chan struct{}
-	MaxWorkers int
+	maxWorkers int
+	client     *http.Client
+
+	results      map[string]*ScanResult
+	resultsMutex sync.Mutex
+	visited      map[string]bool
+	visitedMutex sync.Mutex
 }
 
-type Result struct {
-	Link   string
-	Status string
+type ScanResult struct {
+	URL        string
+	Status     string
+	StatusCode int
+	Error      string
+}
+
+type linkJob struct {
+	url     string
+	baseURL *url.URL
+	depth   int
 }
 
 func NewService(queries *db.Queries, maxWorkers int) *Service {
 	return &Service{
 		queries:    queries,
-		visited:    make(map[string]bool),
-		results:    make(chan Result, 100),
-		sem:        make(chan struct{}, maxWorkers),
-		MaxWorkers: maxWorkers,
+		maxWorkers: maxWorkers,
+		client: &http.Client{
+			Timeout: 5 * time.Second,
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				if len(via) >= 5 {
+					return fmt.Errorf("stopped after 5 redirects")
+				}
+				return nil
+			},
+		},
+		results: make(map[string]*ScanResult),
+		visited: make(map[string]bool),
 	}
 }
 
-func (s *Service) Scan(startUrl string, userId int32) ([]db.Result, error) {
+func (s *Service) Scan(startURL string, userID int32) ([]db.Result, error) {
+	s.resultsMutex.Lock()
+	s.results = make(map[string]*ScanResult)
+	s.resultsMutex.Unlock()
+
+	s.visitedMutex.Lock()
 	s.visited = make(map[string]bool)
-	s.results = make(chan Result, 100)
+	s.visitedMutex.Unlock()
 
-	rawResults := s.startScan(startUrl)
-
-	unique := make(map[string]bool)
-	stored := make([]db.Result, 0, len(rawResults))
-	for _, r := range rawResults {
-		if r.Link == "" {
-			continue
-		}
-		if unique[r.Link] {
-			continue
-		}
-		unique[r.Link] = true
-		res, err := s.queries.CreateResult(context.Background(), db.CreateResultParams{
-			UserID:  userId,
-			PageUrl: startUrl,
-			LinkUrl: r.Link,
-			Status:  r.Status,
-		})
-		if err != nil {
-			return stored, err
-		}
-		stored = append(stored, res)
-	}
-	return stored, nil
-}
-
-func (s *Service) startScan(startURL string) []Result {
-	s.wg.Add(1)
-	s.acquire()
-	go func() {
-		defer s.release()
-		s.scanURL(startURL, startURL)
-	}()
-
-	go func() {
-		s.wg.Wait()
-		close(s.results)
-	}()
-
-	var res []Result
-	for r := range s.results {
-		res = append(res, r)
-	}
-
-	return res
-}
-
-func (s *Service) scanURL(baseURL, currentURL string) {
-	defer s.wg.Done()
-
-	s.mu.Lock()
-	if s.visited[currentURL] {
-		s.mu.Unlock()
-		return
-	}
-	s.visited[currentURL] = true
-	s.mu.Unlock()
-
-	links, err := s.fetchPageLinks(currentURL)
+	baseURL, err := url.Parse(startURL)
 	if err != nil {
-		s.results <- Result{Link: currentURL, Status: "Error fetching page"}
-		return
+		return nil, fmt.Errorf("invalid URL: %v", err)
 	}
 
-	for _, link := range links {
-		abs := s.normalizeURL(baseURL, link)
-		if abs == "" {
-			continue
+	jobs := make(chan linkJob, 1000)
+	done := make(chan bool)
+
+	var wg sync.WaitGroup
+	for i := 0; i < s.maxWorkers; i++ {
+		wg.Add(1)
+		go s.worker(i, jobs, &wg)
+	}
+
+	jobs <- linkJob{url: startURL, baseURL: baseURL, depth: 0}
+
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		log.Printf("Scan completed. Found %d links", len(s.results))
+	case <-time.After(5 * time.Second):
+		log.Printf("Scan timed out after 5 seconds. Found %d links so far", len(s.results))
+	}
+
+	close(jobs)
+
+	var dbResults []db.Result
+	s.resultsMutex.Lock()
+	for url, result := range s.results {
+		dbResult := db.Result{
+			UserID:    userID,
+			PageUrl:   startURL,
+			LinkUrl:   url,
+			Status:    result.Status,
+			CheckedAt: time.Now(),
 		}
+		dbResults = append(dbResults, dbResult)
 
-		if sameDomain(baseURL, abs) {
-			s.wg.Add(1)
-			s.acquire()
-			go func(l string) {
-				defer s.release()
-				defer s.wg.Done()
-				status := s.checkLink(l)
-				s.results <- Result{Link: l, Status: status}
-			}(abs)
-
-			s.mu.Lock()
-			if !s.visited[abs] {
-				s.visited[abs] = true
-				s.wg.Add(1)
-				s.acquire()
-				go func(next string) {
-					defer s.release()
-					s.scanURL(baseURL, next)
-				}(abs)
+		if s.queries != nil {
+			_, err := s.queries.CreateResult(context.Background(), db.CreateResultParams{
+				UserID:  userID,
+				PageUrl: startURL,
+				LinkUrl: url,
+				Status:  result.Status,
+			})
+			if err != nil {
+				log.Printf("Failed to save result for %s: %v", url, err)
 			}
-			s.mu.Unlock()
 		}
 	}
+	s.resultsMutex.Unlock()
+
+	return dbResults, nil
 }
 
-func (s *Service) checkLink(link string) string {
-	resp, err := http.Head(link)
-	if err != nil {
-		respGet, err := http.Get(link)
-		if err != nil {
-			return "Dead"
+func (s *Service) worker(id int, jobs chan linkJob, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	for job := range jobs {
+		s.visitedMutex.Lock()
+		if s.visited[job.url] {
+			s.visitedMutex.Unlock()
+			continue
 		}
-		defer respGet.Body.Close()
-		if respGet.StatusCode >= 200 && respGet.StatusCode < 400 {
-			return "Alive"
-		}
-		return fmt.Sprintf("Code %d", respGet.StatusCode)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode >= 200 && resp.StatusCode < 400 {
-		return "Alive"
-	}
-	return fmt.Sprintf("Code %d", resp.StatusCode)
-}
+		s.visited[job.url] = true
+		s.visitedMutex.Unlock()
 
-func (s *Service) fetchPageLinks(pageURL string) ([]string, error) {
-	resp, err := http.Get(pageURL)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
+		log.Printf("Worker %d: checking %s (depth: %d)", id, job.url, job.depth)
 
-	var links []string
-	doc, err := html.Parse(resp.Body)
-	if err != nil {
-		return nil, err
-	}
+		result := s.checkLink(job.url)
 
-	var f func(*html.Node)
-	f = func(n *html.Node) {
-		if n.Type == html.ElementNode && n.Data == "a" {
-			for _, attr := range n.Attr {
-				if attr.Key == "href" {
-					links = append(links, attr.Val)
+		s.resultsMutex.Lock()
+		s.results[job.url] = result
+		s.resultsMutex.Unlock()
+
+		if result.StatusCode == 200 && job.depth < 2 && strings.Contains(result.Status, "text/html") {
+			links := s.extractLinks(job.url, job.baseURL)
+
+			for _, link := range links {
+				select {
+				case jobs <- linkJob{url: link, baseURL: job.baseURL, depth: job.depth + 1}:
+				default:
 				}
 			}
 		}
-		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			f(c)
+	}
+}
+
+func (s *Service) checkLink(linkURL string) *ScanResult {
+	result := &ScanResult{
+		URL:    linkURL,
+		Status: "unknown",
+	}
+
+	req, err := http.NewRequest("HEAD", linkURL, nil)
+	if err != nil {
+		result.Status = "error"
+		result.Error = fmt.Sprintf("invalid request: %v", err)
+		return result
+	}
+
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; DeadLinkChecker/1.0)")
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		result.Status = "error"
+		result.Error = fmt.Sprintf("request failed: %v", err)
+		return result
+	}
+	defer resp.Body.Close()
+
+	result.StatusCode = resp.StatusCode
+
+	switch {
+	case resp.StatusCode >= 200 && resp.StatusCode < 300:
+		result.Status = fmt.Sprintf("ok (%s)", resp.Header.Get("Content-Type"))
+	case resp.StatusCode == 404:
+		result.Status = "404 Not Found"
+		result.Error = "Page not found"
+	case resp.StatusCode >= 500:
+		result.Status = fmt.Sprintf("Server Error (%d)", resp.StatusCode)
+		result.Error = "Internal server error"
+	case resp.StatusCode >= 400:
+		result.Status = fmt.Sprintf("Client Error (%d)", resp.StatusCode)
+		result.Error = "Client error"
+	default:
+		result.Status = fmt.Sprintf("Redirect (%d)", resp.StatusCode)
+	}
+
+	return result
+}
+
+func (s *Service) extractLinks(pageURL string, baseURL *url.URL) []string {
+	resp, err := s.client.Get(pageURL)
+	if err != nil {
+		log.Printf("Failed to get page %s: %v", pageURL, err)
+		return nil
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1024*1024))
+	if err != nil {
+		log.Printf("Failed to read body from %s: %v", pageURL, err)
+		return nil
+	}
+
+	doc, err := html.Parse(strings.NewReader(string(body)))
+	if err != nil {
+		log.Printf("Failed to parse HTML from %s: %v", pageURL, err)
+		return nil
+	}
+
+	var links []string
+	s.traverseHTML(doc, baseURL, &links)
+
+	linkMap := make(map[string]bool)
+	var uniqueLinks []string
+	for _, link := range links {
+		if !linkMap[link] {
+			linkMap[link] = true
+			uniqueLinks = append(uniqueLinks, link)
 		}
 	}
-	f(doc)
 
-	return links, nil
+	return uniqueLinks
 }
 
-func sameDomain(startURL, checkURL string) bool {
-	start, err := url.Parse(startURL)
-	if err != nil {
-		return false
+func (s *Service) traverseHTML(n *html.Node, baseURL *url.URL, links *[]string) {
+	if n.Type == html.ElementNode && n.Data == "a" {
+		for _, attr := range n.Attr {
+			if attr.Key == "href" {
+				link := s.resolveURL(attr.Val, baseURL)
+				if link != "" && s.isInternalLink(link, baseURL) {
+					*links = append(*links, link)
+				}
+				break
+			}
+		}
 	}
-	check, err := url.Parse(checkURL)
-	if err != nil {
-		return false
+
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		s.traverseHTML(c, baseURL, links)
 	}
-	return start.Hostname() == check.Hostname()
 }
 
-func (s *Service) normalizeURL(base, href string) string {
-	u, err := url.Parse(href)
+func (s *Service) resolveURL(href string, baseURL *url.URL) string {
+	if href == "" || strings.HasPrefix(href, "#") ||
+		strings.HasPrefix(href, "mailto:") || strings.HasPrefix(href, "tel:") {
+		return ""
+	}
+
+	linkURL, err := url.Parse(href)
 	if err != nil {
 		return ""
 	}
-	if u.IsAbs() {
-		return u.String()
-	}
-	baseURL, err := url.Parse(base)
+
+	resolvedURL := baseURL.ResolveReference(linkURL)
+	return resolvedURL.String()
+}
+
+func (s *Service) isInternalLink(link string, baseURL *url.URL) bool {
+	linkURL, err := url.Parse(link)
 	if err != nil {
-		return ""
+		return false
 	}
-	return baseURL.ResolveReference(u).String()
-}
 
-func (s *Service) acquire() {
-	s.sem <- struct{}{}
-}
-
-func (s *Service) release() {
-	<-s.sem
+	return linkURL.Host == baseURL.Host
 }

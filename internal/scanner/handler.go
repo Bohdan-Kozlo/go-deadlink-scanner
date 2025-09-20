@@ -36,7 +36,7 @@ func (h *Handler) StartScan(c *fiber.Ctx) error {
 		})
 	}
 
-	results, err := h.service.Scan(pageURL, int32(userId))
+	results, err := h.service.Scan(pageURL, userId)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).SendString("Error scanning: " + err.Error())
 	}
