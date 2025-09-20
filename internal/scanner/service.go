@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/net/html"
@@ -72,29 +73,38 @@ func (s *Service) Scan(startURL string, userID int32) ([]db.Result, error) {
 	}
 
 	jobs := make(chan linkJob, 1000)
-	done := make(chan bool)
-
 	var wg sync.WaitGroup
+	var activeJobs int32
+
 	for i := 0; i < s.maxWorkers; i++ {
 		wg.Add(1)
-		go s.worker(i, jobs, &wg)
+		go s.workerWithJobTracking(i, jobs, &wg, &activeJobs)
 	}
 
+	atomic.AddInt32(&activeJobs, 1)
 	jobs <- linkJob{url: startURL, baseURL: baseURL, depth: 0}
 
+	done := make(chan struct{})
 	go func() {
-		wg.Wait()
-		close(done)
+		defer close(done)
+		for {
+			time.Sleep(100 * time.Millisecond)
+			if atomic.LoadInt32(&activeJobs) == 0 {
+				close(jobs)
+				wg.Wait()
+				return
+			}
+		}
 	}()
 
 	select {
 	case <-done:
 		log.Printf("Scan completed. Found %d links", len(s.results))
-	case <-time.After(5 * time.Second):
-		log.Printf("Scan timed out after 5 seconds. Found %d links so far", len(s.results))
+	case <-time.After(30 * time.Second):
+		log.Printf("Scan timed out after 30 seconds. Found %d links so far", len(s.results))
+		close(jobs)
+		wg.Wait()
 	}
-
-	close(jobs)
 
 	var dbResults []db.Result
 	s.resultsMutex.Lock()
@@ -125,13 +135,14 @@ func (s *Service) Scan(startURL string, userID int32) ([]db.Result, error) {
 	return dbResults, nil
 }
 
-func (s *Service) worker(id int, jobs chan linkJob, wg *sync.WaitGroup) {
+func (s *Service) workerWithJobTracking(id int, jobs chan linkJob, wg *sync.WaitGroup, activeJobs *int32) {
 	defer wg.Done()
 
 	for job := range jobs {
 		s.visitedMutex.Lock()
 		if s.visited[job.url] {
 			s.visitedMutex.Unlock()
+			atomic.AddInt32(activeJobs, -1)
 			continue
 		}
 		s.visited[job.url] = true
@@ -145,16 +156,29 @@ func (s *Service) worker(id int, jobs chan linkJob, wg *sync.WaitGroup) {
 		s.results[job.url] = result
 		s.resultsMutex.Unlock()
 
-		if result.StatusCode == 200 && job.depth < 2 && strings.Contains(result.Status, "text/html") {
+		if result.StatusCode == 200 && job.depth < 10 && strings.Contains(result.Status, "text/html") {
 			links := s.extractLinks(job.url, job.baseURL)
 
+			newJobsAdded := 0
 			for _, link := range links {
-				select {
-				case jobs <- linkJob{url: link, baseURL: job.baseURL, depth: job.depth + 1}:
-				default:
+				s.visitedMutex.Lock()
+				if !s.visited[link] {
+					select {
+					case jobs <- linkJob{url: link, baseURL: job.baseURL, depth: job.depth + 1}:
+						newJobsAdded++
+					default:
+						// Channel is full, skip this link
+					}
 				}
+				s.visitedMutex.Unlock()
+			}
+
+			if newJobsAdded > 0 {
+				atomic.AddInt32(activeJobs, int32(newJobsAdded))
 			}
 		}
+
+		atomic.AddInt32(activeJobs, -1)
 	}
 }
 
